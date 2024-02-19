@@ -336,7 +336,12 @@ vertices = AM . Map.fromList . map (, InsAndOuts Map.empty Map.empty)
 -- edges           == 'overlays' . 'map' (\\(e, x, y) -> 'edge' e x y)
 -- @
 edges :: (Eq e, Monoid e, Ord a) => [(e, a, a)] -> AdjacencyMap e a
-edges es = fromAdjacencyMaps [ (x, Map.singleton y e) | (e, x, y) <- es ]
+edges es = mconcat $ do
+  (e, src, dst) <- es
+  pure $ mconcat
+    [ AM $ trimZeroes $ Map.singleton src $ InsAndOuts mempty (Map.singleton dst e)
+    , AM $ trimZeroes $ Map.singleton dst $ InsAndOuts (Map.singleton src e) mempty
+    ]
 
 -- | Overlay a given list of graphs.
 -- Complexity: /O((n + m) * log(n))/ time and /O(n + m)/ memory.
@@ -360,11 +365,18 @@ overlays = AM . Map.unionsWith (<>) . map adjacencyMap'
 -- fromAdjacencyMaps [(x, Map.'Map.singleton' y e)]            == if e == 'zero' then 'vertices' [x,y] else 'edge' e x y
 -- 'overlay' (fromAdjacencyMaps xs) (fromAdjacencyMaps ys) == fromAdjacencyMaps (xs '++' ys)
 -- @
-fromAdjacencyMaps :: (Eq e, Monoid e, Ord a) => [(a, Map a e)] -> AdjacencyMap e a
-fromAdjacencyMaps xs = AM $ undefined -- trimZeroes $ Map.unionWith mappend vs es
-  where
-    vs = Map.fromSet (const Map.empty) . Set.unions $ map (Map.keysSet . snd) xs
-    es = Map.fromListWith (Map.unionWith mappend) xs
+fromAdjacencyMaps :: forall e a. (Eq e, Monoid e, Ord a) => [(a, Map a e)] -> AdjacencyMap e a
+fromAdjacencyMaps xs = edges $ do
+  (src, outs) <- xs
+  (dst, e) <- Map.assocs outs
+  pure (e, src, dst)
+
+  -- where
+  --   vs :: Map a (InsAndOuts e a)
+  --   vs = Map.fromSet (const Map.empty) . Set.unions $ map (Map.keysSet . snd) xs
+
+  --   es :: Map a (InsAndOuts e a)
+  --   es = Map.fromListWith (Map.unionWith mappend) xs
 
 -- | The 'isSubgraphOf' function takes two graphs and returns 'True' if the
 -- first graph is a /subgraph/ of the second.
