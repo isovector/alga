@@ -62,9 +62,6 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set        as Set
 import Control.Monad (guard)
 
-instance (Eq e, Ord a, Monoid e) => Semiring (InsAndOuts e a) where
-instance (Eq e, Ord a, Monoid e) => StarSemiring (InsAndOuts e a) where
-
 
 data InsAndOuts e a = InsAndOuts
   { iao_ins  :: Map a e
@@ -72,6 +69,12 @@ data InsAndOuts e a = InsAndOuts
   }
   deriving stock (Eq, Generic)
   deriving anyclass (NFData)
+
+overIns :: (Map a e -> Map a e) -> InsAndOuts e a -> InsAndOuts e a
+overIns f (InsAndOuts i o) = InsAndOuts (f i) o
+
+overOuts :: (Map a e -> Map a e) -> InsAndOuts e a -> InsAndOuts e a
+overOuts f (InsAndOuts i o) = InsAndOuts i (f o)
 
 overBoth :: (Map a e -> Map b f) -> InsAndOuts e a -> InsAndOuts f b
 overBoth f (InsAndOuts i o) = InsAndOuts (f i) (f o)
@@ -368,7 +371,7 @@ overlays = AM . Map.unionsWith (<>) . map adjacencyMap'
 -- 'overlay' (fromAdjacencyMaps xs) (fromAdjacencyMaps ys) == fromAdjacencyMaps (xs '++' ys)
 -- @
 fromAdjacencyMaps :: forall e a. (Eq e, Monoid e, Ord a) => [(a, Map a e)] -> AdjacencyMap e a
-fromAdjacencyMaps xs = edges $ do
+fromAdjacencyMaps xs = mappend (vertices $ fmap fst xs) $ edges $ do
   (src, outs) <- xs
   (dst, e) <- Map.assocs outs
   pure (e, src, dst)
@@ -573,7 +576,11 @@ removeVertex x = AM . Map.map (overBoth $ Map.delete x) . Map.delete x . adjacen
 -- removeEdge 1 2 (1 * 1 * 2 * 2)  == 1 * 1 + 2 * 2
 -- @
 removeEdge :: Ord a => a -> a -> AdjacencyMap e a -> AdjacencyMap e a
-removeEdge x y = AM . Map.adjust (overBoth $ Map.delete y) x . adjacencyMap'
+removeEdge x y
+  = AM
+  . Map.adjust (overIns $ Map.delete x) y
+  . Map.adjust (overOuts $ Map.delete y) x
+  . adjacencyMap'
 
 -- | The function @'replaceVertex' x y@ replaces vertex @x@ with vertex @y@ in a
 -- given 'AdjacencyMap'. If @y@ already exists, @x@ and @y@ will be merged.
@@ -597,14 +604,23 @@ replaceVertex u v = gmap $ \w -> if w == u then v else w
 -- @
 replaceEdge :: forall e a. (Eq e, Monoid e, Ord a) => e -> a -> a -> AdjacencyMap e a -> AdjacencyMap e a
 replaceEdge e x y
-    | e == zero  = AM . addY . Map.alter (Just . maybe (InsAndOuts Map.empty Map.empty) (overBoth $ Map.delete y)) x . adjacencyMap'
-    | otherwise  = AM . addY . Map.alter replace x . adjacencyMap'
+    | e == zero
+      = AM . addX . addY
+      . Map.alter (Just . maybe (InsAndOuts Map.empty Map.empty) (overOuts $ Map.delete y)) x
+      . Map.alter (Just . maybe (InsAndOuts Map.empty Map.empty) (overIns $ Map.delete x)) y
+      . adjacencyMap'
+    | otherwise  = AM . addX . addY . Map.alter replaceX y . Map.alter replaceY x . adjacencyMap'
   where
     addY :: Map a (InsAndOuts e a) -> Map a (InsAndOuts e a)
     addY             = Map.alter (Just . fromMaybe (InsAndOuts Map.empty Map.empty)) y
-    replace :: Maybe (InsAndOuts e a) -> Maybe (InsAndOuts e a)
-    replace (Just (InsAndOuts ins outs)) = Just $ InsAndOuts (Map.insert x e ins) (Map.insert y e outs)
-    replace Nothing  = Just $ InsAndOuts (Map.singleton x e) (Map.singleton y e)
+    addX :: Map a (InsAndOuts e a) -> Map a (InsAndOuts e a)
+    addX             = Map.alter (Just . fromMaybe (InsAndOuts Map.empty Map.empty)) x
+    replaceX :: Maybe (InsAndOuts e a) -> Maybe (InsAndOuts e a)
+    replaceX (Just (InsAndOuts ins outs)) = Just $ InsAndOuts (Map.insert x e ins) outs
+    replaceX Nothing  = Just $ InsAndOuts (Map.singleton x e) mempty
+    replaceY :: Maybe (InsAndOuts e a) -> Maybe (InsAndOuts e a)
+    replaceY (Just (InsAndOuts ins outs)) = Just $ InsAndOuts ins (Map.insert y e outs)
+    replaceY Nothing  = Just $ InsAndOuts mempty (Map.singleton y e)
 
 -- | Transpose a given graph.
 -- Complexity: /O(m * log(n))/ time, /O(n + m)/ memory.
@@ -712,7 +728,7 @@ induceJust = AM . Map.map (overBoth catMaybesMap) . catMaybesMap . adjacencyMap'
 -- 'postSet' x (closure y) == Set.'Set.fromList' ('Algebra.Graph.ToGraph.reachable' y x)
 -- @
 closure :: (Eq e, Ord a, StarSemiring e) => AdjacencyMap e a -> AdjacencyMap e a
-closure = goWarshallFloydKleene . reflexiveClosure
+closure = error "not ported: closure" -- goWarshallFloydKleene . reflexiveClosure
 
 -- | Compute the /reflexive closure/ of a graph over the underlying semiring by
 -- adding a self-loop of weight 'one' to every vertex.
@@ -753,7 +769,7 @@ symmetricClosure m = overlay m (transpose m)
 -- transitiveClosure . transitiveClosure == transitiveClosure
 -- @
 transitiveClosure :: (Eq e, Ord a, StarSemiring e) => AdjacencyMap e a -> AdjacencyMap e a
-transitiveClosure = goWarshallFloydKleene
+transitiveClosure = error "not ported: transitiveClosure" -- goWarshallFloydKleene
 
 -- The iterative part of the Warshall-Floyd-Kleene algorithm
 goWarshallFloydKleene :: forall e a. (Eq e, Ord a, Monoid e, StarSemiring (InsAndOuts e a)) => AdjacencyMap e a -> AdjacencyMap e a
