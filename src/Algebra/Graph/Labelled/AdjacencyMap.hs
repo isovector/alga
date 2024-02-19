@@ -307,7 +307,9 @@ connect :: (Eq e, Monoid e, Ord a) => e -> AdjacencyMap e a -> AdjacencyMap e a 
 connect e (AM x) (AM y)
     | e == mempty = overlay (AM x) (AM y)
     | otherwise   = AM $ Map.unionsWith (<>) $ x : y :
-        [ Map.fromSet (const targets) (Map.keysSet x) ]
+        [ Map.fromSet (const sources) (Map.keysSet y)
+        , Map.fromSet (const targets) (Map.keysSet x)
+        ]
   where
     sources = InsAndOuts (Map.fromSet (const e) (Map.keysSet x)) mempty
     targets = InsAndOuts mempty (Map.fromSet (const e) (Map.keysSet y))
@@ -613,13 +615,8 @@ replaceEdge e x y
 -- transpose ('edge' e x y) == 'edge' e y x
 -- transpose . transpose  == id
 -- @
-transpose :: (Monoid e, Ord a) => AdjacencyMap e a -> AdjacencyMap e a
-transpose (AM m) = undefined -- AM $ Map.foldrWithKey combine vs m
-  where
-    -- No need to use @nonZeroUnion@ here, since we do not add any new edges
-    combine v es = Map.unionWith (Map.unionWith mappend) $
-        Map.fromAscList [ (u, Map.singleton v e) | (u, e) <- Map.toAscList es ]
-    vs = Map.fromSet (const Map.empty) (Map.keysSet m)
+transpose :: AdjacencyMap e a -> AdjacencyMap e a
+transpose (AM m) = AM $ Map.map (\(InsAndOuts ins outs) -> InsAndOuts outs ins) m
 
 -- | Transform a graph by applying a function to each of its vertices. This is
 -- similar to @Functor@'s 'fmap' but can be used with non-fully-parametric
