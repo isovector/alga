@@ -594,15 +594,15 @@ replaceVertex u v = gmap $ \w -> if w == u then v else w
 -- 'edgeLabel' x y (replaceEdge e x y z) == e
 -- @
 replaceEdge :: forall e a. (Eq e, Monoid e, Ord a) => e -> a -> a -> AdjacencyMap e a -> AdjacencyMap e a
-replaceEdge e x y = undefined
-    -- | e == zero  = AM . addY . Map.alter (Just . maybe (InsAndOuts Map.empty Map.empty) (overBoth $ Map.delete y)) x . adjacencyMap'
-    -- | otherwise  = AM . addY . Map.alter replace x . adjacencyMap'
-  -- where
-    -- addY :: Map a (InsAndOuts e a) -> Map a (InsAndOuts e a)
-    -- addY             = Map.alter (Just . fromMaybe (InsAndOuts Map.empty Map.empty)) y
-    -- replace :: Maybe (InsAndOuts e a) -> Maybe (InsAndOuts e a)
-    -- replace (Just m) = Just $ Map.insert y e m
-    -- replace Nothing  = Just $ Map.singleton y e
+replaceEdge e x y
+    | e == zero  = AM . addY . Map.alter (Just . maybe (InsAndOuts Map.empty Map.empty) (overBoth $ Map.delete y)) x . adjacencyMap'
+    | otherwise  = AM . addY . Map.alter replace x . adjacencyMap'
+  where
+    addY :: Map a (InsAndOuts e a) -> Map a (InsAndOuts e a)
+    addY             = Map.alter (Just . fromMaybe (InsAndOuts Map.empty Map.empty)) y
+    replace :: Maybe (InsAndOuts e a) -> Maybe (InsAndOuts e a)
+    replace (Just (InsAndOuts ins outs)) = Just $ InsAndOuts (Map.insert x e ins) (Map.insert y e outs)
+    replace Nothing  = Just $ InsAndOuts (Map.singleton x e) (Map.singleton y e)
 
 -- | Transpose a given graph.
 -- Complexity: /O(m * log(n))/ time, /O(n + m)/ memory.
